@@ -2,6 +2,7 @@ import asyncio
 import websockets
 from pathlib import Path
 import struct
+import base58
 
 # request tags
 SEND_REQUEST_TAG = 0x00
@@ -64,17 +65,17 @@ def parse_received(raw_response: bytes) -> (bytes, bytes):
         if len(other[surb_len + 8:]) != msg_len:
             print("invalid msg len")
             raise
-
-        msg = other[surb_len + 8:]
-        return msg, surb
+        operation = other[surb_len+8]
+        msg = other[surb_len + 9:]
+        return operation, msg, surb
     else:
         (msg_len,), other = struct.unpack(">Q", data[:8]), data[8:]
         if len(other) != msg_len:
             print("invalid msg len")
             raise
-
-        msg = other[:msg_len]
-        return msg, None
+        operation = other[0]
+        msg = other[1:msg_len]
+        return operation, msg, None
 
 
 async def send_file_with_reply():
@@ -134,6 +135,19 @@ async def send_file_without_reply():
             print("writing the file back to the disk!")
             output_file.write(received_file)
 
+async def main_loop():
+    uri = "ws://localhost:1977"
+    async with websockets.connect(uri) as websocket:
+        while True:
+          print("waiting to receive a message from the mix network...")
+          received_response = await websocket.recv()
+          operation, received_data, surb = parse_received(received_response)
+          print ("operation {}".format(operation))
+
+          with open("image.jpg", "wb") as output_file:
+              print("writing the file back to the disk!")
+              output_file.write(received_data)
+
 
 # asyncio.get_event_loop().run_until_complete(send_file_without_reply())
-asyncio.get_event_loop().run_until_complete(send_file_with_reply())
+asyncio.get_event_loop().run_until_complete(main_loop())
