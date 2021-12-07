@@ -1,0 +1,3 @@
+
+class ServiceProviderException(Exception):
+    pass

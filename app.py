@@ -1,8 +1,11 @@
 import asyncio
+from constants import Constants, Operations
+from typing import Tuple
+from utils.service_provider_exception import ServiceProviderException
 import websockets
 from pathlib import Path
 import struct
-import base58
+import hashlib
 
 # request tags
 SEND_REQUEST_TAG = 0x00
@@ -43,18 +46,16 @@ def make_reply_request(message: bytes, reply_surb: bytes) -> bytes:
 
 # it should have structure of RECEIVED_RESPONSE_TAG || with_reply || (surb_len || surb) || msg_len || msg
 # where surb_len || surb is only present if 'with_reply' is true
-def parse_received(raw_response: bytes) -> (bytes, bytes):
+def parse_received(raw_response: bytes) -> tuple([bytes, bytes, bytes]):
     if raw_response[0] != RECEIVED_RESPONSE_TAG:
-        print('Received invalid response!')
-        raise
+        raise ServiceProviderException('Received invalid response!')
 
     if raw_response[1] == 1:
         has_surb = True
     elif raw_response[1] == 0:
         has_surb = False
     else:
-        print("malformed received response!")
-        raise
+        raise ServiceProviderException('Received invalid response!')
 
     data = raw_response[2:]
     if has_surb:
@@ -63,19 +64,36 @@ def parse_received(raw_response: bytes) -> (bytes, bytes):
         (msg_len,) = struct.unpack(">Q", other[surb_len:surb_len + 8])
 
         if len(other[surb_len + 8:]) != msg_len:
-            print("invalid msg len")
-            raise
+            raise ServiceProviderException("invalid msg len")
         operation = other[surb_len+8]
         msg = other[surb_len + 9:]
         return operation, msg, surb
     else:
         (msg_len,), other = struct.unpack(">Q", data[:8]), data[8:]
         if len(other) != msg_len:
-            print("invalid msg len")
-            raise
+            raise ServiceProviderException("invalid msg len")
         operation = other[0]
         msg = other[1:msg_len]
         return operation, msg, None
+
+def compute_raw_data_md5sum(raw_data: bytes) -> str:
+    return hashlib.md5(raw_data).hexdigest()
+
+def save_received_file(received_data):
+    filename = compute_raw_data_md5sum(received_data)
+    file_path = Constants.UPLOAD_DIR + filename
+    with open(file_path, "wb") as output_file:
+        print("writing the file back to the disk!")
+        output_file.write(received_data)
+
+def read_file(md5sum: bytes):
+    filename = md5sum.decode('utf-8')
+    print("reading file {}".format(md5sum))
+    file_path = Constants.UPLOAD_DIR + filename
+    file_content = None
+    with open(file_path, "rb") as file:
+        file_content = file.read()
+    return file_content
 
 
 async def send_file_with_reply():
@@ -139,19 +157,25 @@ async def main_loop():
     uri = "ws://localhost:1977"
     async with websockets.connect(uri) as websocket:
         while True:
-          print("waiting to receive a message from the mix network...")
-          received_response = await websocket.recv()
-          operation, received_data, surb = parse_received(received_response)
-          print ("operation {}".format(operation))
-
-          with open("image.jpg", "wb") as output_file:
-              print("writing the file back to the disk!")
-              output_file.write(received_data)
-          print(">>>> surb {}" .format(str(surb)))
-          reply_message_with_file = make_reply_request(received_data, surb)
-          await websocket.send(reply_message_with_file)
-
-
+            print("waiting to receive a message from the mix network...")
+            received_response = await websocket.recv()
+            operation, received_data, surb = parse_received(received_response)
+            print ("operation {}".format(operation))
+            
+            if operation == Operations.WRITE_FILE:
+                save_received_file(received_data)
+                reply_ok = make_reply_request(b'OK', surb)
+                print("sending a reply back")
+                await websocket.send(reply_ok)
+                print("reply sent")
+            elif operation == Operations.READ_FILE:
+                file_content = read_file(received_data)
+                reply_message_with_file = make_reply_request(file_content, surb)
+                print("sending a reply back")
+                await websocket.send(reply_message_with_file)
+                print("reply sent")
+            elif operation == Operations.DELETE_FILE:
+                pass
 
 # asyncio.get_event_loop().run_until_complete(send_file_without_reply())
 asyncio.get_event_loop().run_until_complete(main_loop())
