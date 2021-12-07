@@ -147,6 +147,10 @@ async def main_loop():
           with open("image.jpg", "wb") as output_file:
               print("writing the file back to the disk!")
               output_file.write(received_data)
+          print(">>>> surb {}" .format(str(surb)))
+          reply_message_with_file = make_reply_request(received_data, surb)
+          await websocket.send(reply_message_with_file)
+
 
 
 # asyncio.get_event_loop().run_until_complete(send_file_without_reply())
