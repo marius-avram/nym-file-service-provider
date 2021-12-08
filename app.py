@@ -1,11 +1,10 @@
 import asyncio
 from constants import Constants, Operations
-from typing import Tuple
 from utils.service_provider_exception import ServiceProviderException
 import websockets
-from pathlib import Path
 import struct
 import hashlib
+import os
 
 # request tags
 SEND_REQUEST_TAG = 0x00
@@ -24,8 +23,7 @@ def make_self_address_request() -> bytes:
 
 def parse_self_address_response(raw_response: bytes) -> bytes:
     if len(raw_response) != 97 or raw_response[0] != SELF_ADDRESS_RESPONSE_TAG:
-        print('Received invalid response!')
-        raise
+        raise ServiceProviderException('Received invalid response')
 
     return raw_response[1:]
 
@@ -91,67 +89,17 @@ def read_file(md5sum: bytes):
     print("reading file {}".format(md5sum))
     file_path = Constants.UPLOAD_DIR + filename
     file_content = None
-    with open(file_path, "rb") as file:
-        file_content = file.read()
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as file:
+            file_content = file.read()
     return file_content
 
-
-async def send_file_with_reply():
-    uri = "ws://localhost:1977"
-    async with websockets.connect(uri) as websocket:
-        self_address_req = make_self_address_request()
-        await websocket.send(self_address_req)
-
-        self_address = parse_self_address_response(await websocket.recv())
-        file_data = Path('static/dummy_file').read_bytes()
-
-        send_request = make_send_request(self_address, file_data, True)
-        print("sending content of 'dummy_file' over the mix network...")
-        await websocket.send(send_request)
-
-        print("waiting to receive the 'dummy_file' from the mix network...")
-        received_response = await websocket.recv()
-        received_file, surb = parse_received(received_response)
-
-        with open("received_file_withreply", "wb") as output_file:
-            print("writing the file back to the disk!")
-            output_file.write(received_file)
-
-        reply_message = b"hello from reply SURB! - thanks for sending me the file!"
-        reply_request = make_reply_request(reply_message, surb)
-
-        print("sending '{}' (using reply SURB!) over the mix network...".format(reply_message))
-        await websocket.send(reply_request)
-
-        print("waiting to receive a message from the mix network...")
-        received_response = await websocket.recv()
-        received_msg, surb = parse_received(received_response)
-        assert surb is None  # no surbs in replies!
-
-        print("received '{}' from the mix network".format(received_msg))
-
-
-async def send_file_without_reply():
-    uri = "ws://localhost:1977"
-    async with websockets.connect(uri) as websocket:
-        self_address_req = make_self_address_request()
-        await websocket.send(self_address_req)
-
-        self_address = parse_self_address_response(await websocket.recv())
-        file_data = Path('static/dummy_file').read_bytes()
-
-        send_request = make_send_request(self_address, file_data, False)
-        print("sending content of 'dummy_file' over the mix network...")
-        await websocket.send(send_request)
-
-        print("waiting to receive the 'dummy_file' from the mix network...")
-        received_response = await websocket.recv()
-        received_file, surb = parse_received(received_response)
-        assert surb is None  # we didn't attach a surb so we expect a None here!
-
-        with open("received_file_noreply", "wb") as output_file:
-            print("writing the file back to the disk!")
-            output_file.write(received_file)
+def delete_file(md5sum: bytes):
+    filename = md5sum.decode('utf-8')
+    print("deleting file {}".format(md5sum))
+    file_path = Constants.UPLOAD_DIR + filename
+    if os.path.exists(file_path):
+        os.remove(file_path)
 
 async def main_loop():
     uri = "ws://localhost:1977"
@@ -175,7 +123,6 @@ async def main_loop():
                 await websocket.send(reply_message_with_file)
                 print("reply sent")
             elif operation == Operations.DELETE_FILE:
-                pass
+                delete_file(received_data)
 
-# asyncio.get_event_loop().run_until_complete(send_file_without_reply())
 asyncio.get_event_loop().run_until_complete(main_loop())
