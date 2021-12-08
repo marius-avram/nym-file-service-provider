@@ -11,16 +11,16 @@ Works best with
 ## Running
 You can create a separate virtual env if you want in you repository clone:
 
-`python3 -m venv env`
+- ```python3 -m venv env```
 
 Activate it
-`source env/bin/activate`
+- ```source env/bin/activate```
 
 Install requirements
-`pip install -r requirements.txt`
+- ```pip install -r requirements.txt```
 
 Start
-`python app.py`
+- ```python app.py```
 
 
 Requires a nym-client listening on `http://localhost:1977`
