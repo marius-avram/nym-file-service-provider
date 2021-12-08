@@ -130,3 +130,5 @@ dmypy.json
 
 # Upload dir content
 uploads/*
+
+!uploads/.gitkeep
