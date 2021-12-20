@@ -1,5 +1,6 @@
 # nym-file-service-provider
-A service provider for the Nym network, that saves locally received files 
+A service provider for the Nym network, that saves locally received files.
+It behaves as a server application and in a production environment should be available 24/7.
 
 This is a minimal implentation. Communication is done with binary messages.
 
@@ -24,3 +25,9 @@ Start
 
 
 Requires a nym-client listening on `http://localhost:1977`
+
+## Client
+
+The client/GUI developed for this file service provider can be found here:  
+  
+[nym-file-uploader-client](https://github.com/marius-avram/nym-file-uploader-client)
